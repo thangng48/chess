@@ -148,10 +148,24 @@ func (a multiDecoder) Decode(pos *Position, s string) (*Move, error) {
 	return nil, fmt.Errorf(`chess: failed to decode notation text "%s" for position %s`, s, pos)
 }
 
+func getDecoder(d string) []Decoder {
+	switch d {
+	case "Algebraic":
+		return []Decoder{AlgebraicNotation{}}
+	case "Long Algebraic":
+		return []Decoder{LongAlgebraicNotation{}}
+	case "UCI":
+		return []Decoder{UCINotation{}}
+	default:
+		return []Decoder{AlgebraicNotation{}, LongAlgebraicNotation{}, UCINotation{}}
+	}
+}
+
 func decodePGN(pgn string) (*Game, error) {
 	tagPairs := getTagPairs(pgn)
 	moveComments, outcome := moveListWithComments(pgn)
 	gameFuncs := []func(*Game){}
+	decoder := multiDecoder([]Decoder{AlgebraicNotation{}, LongAlgebraicNotation{}, UCINotation{}})
 	for _, tp := range tagPairs {
 		if strings.ToLower(tp.Key) == "fen" {
 			fenFunc, err := FEN(tp.Value)
@@ -161,11 +175,13 @@ func decodePGN(pgn string) (*Game, error) {
 			gameFuncs = append(gameFuncs, fenFunc)
 			break
 		}
+		if strings.ToLower(tp.Key) == "decoder" {
+			decoder = getDecoder(tp.Value)
+		}
 	}
 	gameFuncs = append(gameFuncs, TagPairs(tagPairs))
 	g := NewGame(gameFuncs...)
 	g.ignoreAutomaticDraws = true
-	decoder := multiDecoder([]Decoder{AlgebraicNotation{}, LongAlgebraicNotation{}, UCINotation{}})
 	for _, move := range moveComments {
 		m, err := decoder.Decode(g.Position(), move.MoveStr)
 		if err != nil {
